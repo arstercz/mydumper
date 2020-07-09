@@ -2783,8 +2783,6 @@ void dump_schema_post_data(MYSQL *conn, char *database, char *filename) {
       result2 = mysql_store_result(conn);
       row2 = mysql_fetch_row(result2);
       g_string_printf(statement, "%s", row2[2]);
-      splited_st = g_strsplit(statement->str, ";\n", 0);
-      g_string_printf(statement, "%s", g_strjoinv("; \n", splited_st));
       g_string_append(statement, ";\n");
       restore_charset(statement);
       if (!write_data((FILE *)outfile, statement)) {
@@ -2827,8 +2825,6 @@ void dump_schema_post_data(MYSQL *conn, char *database, char *filename) {
       result2 = mysql_store_result(conn);
       row2 = mysql_fetch_row(result2);
       g_string_printf(statement, "%s", row2[2]);
-      splited_st = g_strsplit(statement->str, ";\n", 0);
-      g_string_printf(statement, "%s", g_strjoinv("; \n", splited_st));
       g_string_append(statement, ";\n");
       restore_charset(statement);
       if (!write_data((FILE *)outfile, statement)) {
@@ -2872,8 +2868,6 @@ void dump_schema_post_data(MYSQL *conn, char *database, char *filename) {
       // DROP EVENT IF EXISTS event_name
       row2 = mysql_fetch_row(result2);
       g_string_printf(statement, "%s", row2[3]);
-      splited_st = g_strsplit(statement->str, ";\n", 0);
-      g_string_printf(statement, "%s", g_strjoinv("; \n", splited_st));
       g_string_append(statement, ";\n");
       restore_charset(statement);
       if (!write_data((FILE *)outfile, statement)) {
@@ -2953,8 +2947,6 @@ void dump_triggers_data(MYSQL *conn, char *database, char *table,
     result2 = mysql_store_result(conn);
     row2 = mysql_fetch_row(result2);
     g_string_append_printf(statement, "%s", row2[2]);
-    splited_st = g_strsplit(statement->str, ";\n", 0);
-    g_string_printf(statement, "%s", g_strjoinv("; \n", splited_st));
     g_string_append(statement, ";\n");
     restore_charset(statement);
     if (!write_data((FILE *)outfile, statement)) {
