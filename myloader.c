@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <zlib.h>
+#include <pcre.h>
 #include "config.h"
 #include "common.h"
 #include "myloader.h"
@@ -43,6 +44,7 @@ guint commit_count = 1000;
 gchar *directory = NULL;
 gboolean overwrite_tables = FALSE;
 gboolean enable_binlog = FALSE;
+gboolean ignore_space = FALSE;
 gchar *source_db = NULL;
 static GMutex *init_mutex = NULL;
 
@@ -52,6 +54,7 @@ gboolean read_data(FILE *file, gboolean is_compressed, GString *data,
                    gboolean *eof);
 void restore_data(MYSQL *conn, char *database, char *table,
                   const char *filename, gboolean is_schema, gboolean need_use);
+gboolean filename_regex(const char *filename);
 void *process_queue(struct thread_data *td);
 void add_table(const gchar *filename, struct configuration *conf);
 void add_schema(const gchar *filename, MYSQL *conn);
@@ -71,6 +74,8 @@ static GOptionEntry entries[] = {
      "Number of queries per transaction, default 1000", NULL},
     {"overwrite-tables", 'o', 0, G_OPTION_ARG_NONE, &overwrite_tables,
      "Drop tables if they already exist", NULL},
+    {"ignore-space", 'i', 0, G_OPTION_ARG_NONE, &ignore_space,
+     "Ignore the spaces after semicolon in sql statement which in events, function, procedure...", NULL},
     {"database", 'B', 0, G_OPTION_ARG_STRING, &db,
      "An alternative database to restore into", NULL},
     {"source-db", 's', 0, G_OPTION_ARG_STRING, &source_db,
@@ -512,6 +517,8 @@ void restore_data(MYSQL *conn, char *database, char *table,
   void *infile;
   gboolean is_compressed = FALSE;
   gboolean eof = FALSE;
+  gboolean is_matchfile = FALSE;
+  gchar **splited_st = NULL;
   guint query_counter = 0;
   GString *data = g_string_sized_new(512);
 
@@ -548,10 +555,19 @@ void restore_data(MYSQL *conn, char *database, char *table,
   if (!is_schema)
     mysql_query(conn, "START TRANSACTION");
 
+  is_matchfile = filename_regex(filename);
+
   while (eof == FALSE) {
     if (read_data(infile, is_compressed, data, &eof)) {
       // Search for ; in last 5 chars of line
       if (g_strrstr(&data->str[data->len >= 5 ? data->len - 5 : 0], ";\n")) {
+
+        // ignore space if match the filename
+        if (is_matchfile && ignore_space) {
+            splited_st = g_strsplit(data->str, "; \n", 0);
+            g_string_printf(data, "%s", g_strjoinv(";\n", splited_st));
+        }
+
         if (mysql_real_query(conn, data->str, data->len)) {
           g_critical("Error restoring %s.%s from file %s: %s",
                      db ? db : database, table, filename, mysql_error(conn));
@@ -591,6 +607,31 @@ void restore_data(MYSQL *conn, char *database, char *table,
     gzclose((gzFile)infile);
   }
   return;
+}
+
+gboolean filename_regex(const char *filename) {
+    static pcre *re = NULL;
+    int rc;
+    int ovector[6] = {0};
+    const char *error;
+    int erroroffset;
+
+    /* match the trigger and post file from `mydumper.c` 
+       which has the string "; \n" in the dump data */
+    const char *regexstring = "schema-(?:triggers|post)";
+
+    if (!re) {
+       re = pcre_compile(regexstring, PCRE_CASELESS | PCRE_MULTILINE, &error,
+                         &erroroffset, NULL); 
+       if (!re) {
+           g_warning("filename regex failed: %s", error);
+           return FALSE;
+       }
+    }
+
+    rc = pcre_exec(re, NULL, filename, strlen(filename), 0, 0, ovector, 6);
+
+    return (rc > 0) ? TRUE : FALSE;
 }
 
 gboolean read_data(FILE *file, gboolean is_compressed, GString *data,
