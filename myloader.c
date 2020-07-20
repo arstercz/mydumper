@@ -563,9 +563,13 @@ void restore_data(MYSQL *conn, char *database, char *table,
       if (g_strrstr(&data->str[data->len >= 5 ? data->len - 5 : 0], ";\n")) {
 
         // ignore space if match the filename
-        if (is_matchfile && ignore_space) {
-            splited_st = g_strsplit(data->str, "; \n", 0);
-            g_string_printf(data, "%s", g_strjoinv(";\n", splited_st));
+        if (is_matchfile) {
+            splited_st = g_strsplit(data->str, "; --\n", 0);
+            if (ignore_space) {
+                g_string_printf(data, "%s", g_strjoinv(";\n", splited_st));
+            } else {
+                g_string_printf(data, "%s", g_strjoinv("; \n", splited_st));
+            }
         }
 
         if (mysql_real_query(conn, data->str, data->len)) {
@@ -617,7 +621,7 @@ gboolean filename_regex(const char *filename) {
     int erroroffset;
 
     /* match the trigger and post file from `mydumper.c` 
-       which has the string "; \n" in the dump data */
+       which has the string "; --\n" in the dump data */
     const char *regexstring = "schema-(?:triggers|post)";
 
     if (!re) {
